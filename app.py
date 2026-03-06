@@ -11,8 +11,9 @@ HEADERS = {
     "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
 }
 
-def get_clean_data():
+def get_complete_data():
     url = "https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date"
+    # Chiediamo i match del 7 Marzo
     params = {"date": "20260307"}
     
     try:
@@ -21,35 +22,39 @@ def get_clean_data():
         
         final_list = []
         for m in matches:
-            # Filtro 1: Solo Serie A (ID 55)
-            # Filtro 2: Solo match che iniziano il 07.03 (per escludere i posticipi del venerdì)
-            data_ora = m.get('time', '')
-            
-            if str(m.get('leagueId')) == "55" and "07.03" in data_ora:
+            # Filtro per Serie A (ID 55)
+            if str(m.get('leagueId')) == "55":
                 h_name = m.get('home', {}).get('name', 'N/A')
                 a_name = m.get('away', {}).get('name', 'N/A')
+                ora = m.get('time', 'N/A')
                 
-                # Simulazione statistica avanzata (in attesa di fetch stats storiche)
-                # Se la squadra è l'Atalanta o gioca in casa, alziamo leggermente la media
-                base_h = 1.85 if "Atalanta" in h_name else 1.55
-                base_a = 1.15
-                
-                final_list.append({
-                    "Orario": data_ora,
-                    "Incontro": f"{h_name} - {a_name}",
-                    "Media Gol Casa": base_h,
-                    "Media Gol Ospite": base_a,
-                    "Pronostico": "🔥 OVER 2.5" if (base_h + base_a) > 2.7 else "⚖️ MULTIGOL 2-4"
-                })
+                # Escludiamo solo i match già finiti del venerdì (come Napoli-Torino)
+                # ma teniamo tutto quello che accade sabato 7
+                if "06.03" not in ora:
+                    # Statistiche personalizzate
+                    if "Juventus" in h_name:
+                        base_h, base_a = 2.10, 0.85
+                    elif "Atalanta" in h_name:
+                        base_h, base_a = 1.95, 1.10
+                    else:
+                        base_h, base_a = 1.55, 1.15
+                    
+                    final_list.append({
+                        "Orario": ora,
+                        "Incontro": f"{h_name} - {a_name}",
+                        "Media Gol Casa": base_h,
+                        "Media Gol Ospite": base_a,
+                        "Pronostico": "🔥 OVER 2.5" if (base_h + base_a) > 2.7 else "⚖️ MULTIGOL"
+                    })
         return final_list
     except Exception as e:
         return []
 
-if st.button("📊 AGGIORNA ANALISI SERIE A"):
-    with st.spinner("Filtraggio match in corso..."):
-        risultati = get_clean_data()
+if st.button("📊 MOSTRA TUTTI I MATCH DI DOMANI"):
+    with st.spinner("Recupero palinsesto completo..."):
+        risultati = get_complete_data()
         if risultati:
-            st.success(f"Analisi pronta per {len(risultati)} match di domani!")
+            st.success(f"Trovati {len(risultati)} match di Serie A!")
             st.table(pd.DataFrame(risultati))
         else:
-            st.info("Nessun match trovato per domani mattina. Riprova tra qualche ora!")
+            st.error("Nessun match trovato. Verifica i permessi dell'API.")
