@@ -1,103 +1,144 @@
 import streamlit as st
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# --- CONFIGURAZIONE ---
-st.set_page_config(page_title="PL Analyzer - TOTAL", layout="wide")
+# --- 1. CONFIGURAZIONE ---
+st.set_page_config(page_title="PL Analyzer PRO", layout="wide")
 
-RAPID_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
-ODDS_KEYS = [
-    "bec8a75021e007e67ebc77b9b5c222be", 
-    "c6a3eb71e7e203103715c6ee7dc932cd"
-]
+if "auth" not in st.session_state:
+    st.session_state["auth"] = False
 
-def clean_name(n):
-    """Pulisce i nomi per trovare corrispondenze anche se diverse"""
-    n = n.lower()
-    for word in ["fc", "ac", "as", "sc", "cf", "fk", "milan", "lisbon", "eindhoven", " "]:
-        n = n.replace(word, "")
-    return n.strip()
+if not st.session_state["auth"]:
+    st.title("🔐 Accesso Riservato")
+    password = st.text_input("Inserisci Licenza:", type="password")
+    if st.button("Attiva Software"):
+        if password == "BOMBER2026":
+            st.session_state["auth"] = True
+            st.rerun()
+    st.stop()
 
-@st.cache_data(ttl=3600)
-def get_all_data(sport_key, league_id):
-    odds, stats = None, None
-    # 1. Recupero Quote (Prova tutte le chiavi)
-    for key in ODDS_KEYS:
-        url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/"
-        try:
-            res = requests.get(url, params={"apiKey": key, "regions": "eu", "markets": "totals"}, timeout=10)
-            if res.status_code == 200:
-                odds = res.json()
-                break
-        except: continue
-    
-    # 2. Recupero Classifica (Prova stagioni recenti)
-    headers = {"X-RapidAPI-Key": RAPID_KEY, "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"}
-    for s in ["2024", "2025"]:
-        try:
-            res = requests.get("https://api-football-v1.p.rapidapi.com/v3/standings", 
-                             headers=headers, params={"league": league_id, "season": s}).json()
-            if res.get('response'):
-                stats = res['response'][0]['league']['standings'][0]
-                break
-        except: continue
-    return odds, stats
+# --- 2. CHIAVI API ---
+ODDS_API_KEY = "c6a3eb71e7e203103715c6ee7dc932cd"
+FOOTBALL_DATA_KEY = "1224218727ff4b98bea0cd9941196e99"
 
-st.title("⚽ ANALYZER - TUTTI I MATCH")
+st.title("⚽ ANALYZER PRO - FIX ERRORI & MULTI-LEAGUE")
 
-leagues = {
-    "Serie A 🇮🇹": {"id": "135", "api": "soccer_italy_serie_a"},
-    "Super League 🇨🇭": {"id": "207", "api": "soccer_switzerland_superleague"},
-    "Eredivisie 🇳🇱": {"id": "88", "api": "soccer_netherlands_eredivisie"},
-    "Primeira Liga 🇵🇹": {"id": "94", "api": "soccer_portugal_primeira_liga"}
+# --- 3. MAPPE CAMPIONATI ---
+league_map = {
+    "Eredivisie (NL) 🇳🇱": "DED",
+    "Eerste Divisie (NL 2) 🇳🇱": "ED",
+    "Super League (CH) 🇨🇭": "SL",
+    "Challenge League (CH 2) 🇨🇭": "SCL",
+    "Bundesliga (DE) 🇩🇪": "BL1",
+    "Primeira Liga (PT) 🇵🇹": "PPL",
+    "Premier League (UK) 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "PL",
+    "Serie A (IT) 🇮🇹": "SA",
+    "La Liga (ES) 🇪🇸": "PD",
+    "Ligue 1 (FR) 🇫🇷": "FL1"
 }
 
-scelta = st.selectbox("Seleziona Campionato:", list(leagues.keys()))
+api_league_map = {
+    "Eredivisie (NL) 🇳🇱": "soccer_netherlands_eredivisie",
+    "Eerste Divisie (NL 2) 🇳🇱": "soccer_netherlands_leerste_divisie",
+    "Super League (CH) 🇨🇭": "soccer_switzerland_superleague",
+    "Challenge League (CH 2) 🇨🇭": "soccer_switzerland_challenge_league",
+    "Bundesliga (DE) 🇩🇪": "soccer_germany_bundesliga",
+    "Primeira Liga (PT) 🇵🇹": "soccer_portugal_primeira_liga",
+    "Premier League (UK) 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "soccer_epl",
+    "Serie A (IT) 🇮🇹": "soccer_italy_serie_a",
+    "La Liga (ES) 🇪🇸": "soccer_spain_la_liga",
+    "Ligue 1 (FR) 🇫🇷": "soccer_france_ligue_one"
+}
 
-if st.button("MOSTRA TUTTE LE PARTITE DISPONIBILI"):
-    with st.spinner("Scansione completa in corso..."):
-        res_odds, standings = get_all_data(leagues[scelta]["api"], leagues[scelta]["id"])
+scelta = st.selectbox("Seleziona Campionato:", list(league_map.keys()))
 
-    if res_odds and standings:
-        # Database statistico con nomi ultra-puliti
-        team_stats = {clean_name(t['team']['name']): t for t in standings}
+if st.button("ESEGUI ANALISI"):
+    with st.spinner("Sincronizzazione dati in corso..."):
+        headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
         
-        # Media Gol Lega
-        total_g = sum(t['all']['goals']['for'] for t in standings)
-        total_p = (sum(t['all']['played'] for t in standings) / 2)
-        avg_l = total_g / total_p if total_p > 0 else 2.5
+        # 1. Recupero Classifica
+        res_stats = requests.get(f"https://api.football-data.org/v4/competitions/{league_map[scelta]}/standings", headers=headers).json()
         
-        match_count = 0
-        st.subheader(f"Partite trovate per {scelta}")
+        # 2. Recupero Match per Forma (120gg)
+        d_from = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
+        d_to = datetime.now().strftime('%Y-%m-%d')
+        res_history = requests.get(f"https://api.football-data.org/v4/competitions/{league_map[scelta]}/matches?dateFrom={d_from}&dateTo={d_to}&status=FINISHED", headers=headers).json()
+        
+        # 3. Recupero Quote
+        res_odds = requests.get(f"https://api.the-odds-api.com/v4/sports/{api_league_map[scelta]}/odds/?apiKey={ODDS_API_KEY}&regions=eu&markets=h2h,totals").json()
 
-        for m in res_odds:
-            h_raw, a_raw = m['home_team'], m['away_team']
-            h_c, a_c = clean_name(h_raw), clean_name(a_raw)
+        if "standings" in res_stats and "matches" in res_history:
+            standings = res_stats['standings']
             
-            # Matching flessibile: controlla se il nome pulito è contenuto nell'altro
-            h_s = next((v for k,v in team_stats.items() if k in h_c or h_c in k), None)
-            a_s = next((v for k,v in team_stats.items() if k in a_c or a_c in k), None)
-
-            if h_s and a_s:
-                match_count += 1
-                hp, ap = max(h_s['home']['played'], 1), max(a_s['away']['played'], 1)
-                
-                # Formula xG Casa/Fuori (Parametri reali)
-                xh = ((h_s['home']['goals']['for']/hp)/avg_l) * ((a_s['away']['goals']['against']/ap)/avg_l) * avg_l
-                xa = ((a_s['away']['goals']['for']/ap)/avg_l) * ((h_s['home']['goals']['against']/hp)/avg_l) * avg_l
-                txg = xh + xa
-                
-                m_time = datetime.strptime(m['commence_time'], "%Y-%m-%dT%H:%M:%SZ").strftime('%d/%m %H:%M')
-
-                with st.expander(f"📅 {m_time} | {h_raw} - {a_raw} | xG: {txg:.2f}"):
-                    if txg > 2.80: st.success("🎯 CONSIGLIO: OVER 2.5")
-                    elif txg < 2.05: st.warning("🛡️ CONSIGLIO: UNDER 2.5")
-                    else: st.info("⚖️ NO BET")
+            # --- FIX INDEXERROR: Gestione Tabelle Casa/Fuori ---
+            # Se l'API non dà tabelle separate, usiamo quella totale per tutto
+            if len(standings) >= 3:
+                home_db = {t['team']['name']: t for t in standings[1]['table']}
+                away_db = {t['team']['name']: t for t in standings[2]['table']}
             else:
-                # Debug per capire quali nomi falliscono
-                st.write(f"⚠️ Match ignorato per nomi: {h_raw} vs {a_raw}")
+                home_db = {t['team']['name']: t for t in standings[0]['table']}
+                away_db = {t['team']['name']: t for t in standings[0]['table']}
+            
+            total_db = {t['team']['name']: t for t in standings[0]['table']}
+            match_history = res_history['matches']
+            
+            # Media gol campionato
+            total_g = sum(t['goalsFor'] for t in standings[0]['table'])
+            total_p = sum(t['playedGames'] for t in standings[0]['table']) / 2
+            avg_l = total_g / total_p if total_p > 0 else 2.5
 
-        if match_count == 0:
-            st.warning("Nessuna partita rilevata per questo campionato. Verifica i crediti API.")
-    else:
-        st.error("❌ Impossibile scaricare i dati. Controlla la tua connessione o le chiavi API.")
+            for match in res_odds:
+                m_time = datetime.strptime(match['commence_time'], "%Y-%m-%dT%H:%M:%SZ")
+                if datetime.utcnow() <= m_time <= (datetime.utcnow() + timedelta(hours=48)):
+                    h_n, a_n = match['home_team'], match['away_team']
+                    
+                    # Recupero dati con matching flessibile
+                    h_s = next((v for k,v in home_db.items() if h_n in k or k in h_n), None)
+                    a_s = next((v for k,v in away_db.items() if a_n in k or k in a_n), None)
+
+                    if h_s and a_s:
+                        # --- STATISTICHE REALI ---
+                        h_gf, h_gs, h_p = h_s['goalsFor'], h_s['goalsAgainst'], max(1, h_s['playedGames'])
+                        a_gf, a_gs, a_p = a_s['goalsFor'], a_s['goalsAgainst'], max(1, a_s['playedGames'])
+
+                        # --- FIX NAMEERROR: Calcolo xG con variabili corrette ---
+                        xh = ((h_gf/h_p)/avg_l) * ((a_gs/a_p)/avg_l) * avg_l
+                        xa = ((a_gf/a_p)/avg_l) * ((h_gs/h_p)/avg_l) * avg_l
+                        txg = xh + xa
+
+                        # Recupero Forma Specifica (ID)
+                        h_id, a_id = h_s['team']['id'], a_s['team']['id']
+                        f_h = sum(3 if m['score']['winner']=='HOME_TEAM' else 1 if m['score']['winner']=='DRAW' else 0 for m in [m for m in match_history if m['homeTeam']['id']==h_id][-5:])
+                        f_a = sum(3 if m['score']['winner']=='AWAY_TEAM' else 1 if m['score']['winner']=='DRAW' else 0 for m in [m for m in match_history if m['awayTeam']['id']==a_id][-5:])
+
+                        # Quote
+                        try:
+                            m_h2h = next(m for m in match['bookmakers'][0]['markets'] if m['key'] == 'h2h')['outcomes']
+                            q1 = next(o['price'] for o in m_h2h if o['name'] == h_n)
+                            q2 = next(o['price'] for o in m_h2h if o['name'] == a_n)
+                            m_tot = next(m for m in match['bookmakers'][0]['markets'] if m['key'] == 'totals')['outcomes']
+                            qo25 = next(o['price'] for o in m_tot if o['name'] == 'Over' and o['point'] == 2.5)
+                        except: continue
+
+                        with st.expander(f"📊 {h_n} vs {a_n} | xG: {txg:.2f}"):
+                            c1, c2, c3 = st.columns(3)
+                            with c1:
+                                st.metric(f"FORMA {h_n}", f"{f_h}/15")
+                                st.write(f"Gol Fatti (Casa): {h_gf}")
+                            with c2:
+                                st.metric(f"FORMA {a_n}", f"{f_a}/15")
+                                st.write(f"Gol Fatti (Fuori): {a_gf}")
+                            with c3:
+                                st.metric("QUOTA O2.5", qo25)
+                                if qo25 < 1.75 and txg > 2.70: st.success("📉 TREND: VALORE")
+
+                            st.divider()
+                            # PRONOSTICO
+                            p1, p2 = st.columns(2)
+                            with p1:
+                                if txg > 2.80: st.success("🎯 OVER 2.5")
+                                elif txg < 2.05: st.warning("🛡️ UNDER 2.5")
+                                else: st.info("⚖️ NO BET")
+                            with p2:
+                                if q1 < 1.60 and f_h >= 10: st.success(f"🔥 TREND {h_n}")
+                                elif q2 < 1.60 and f_a >= 10: st.success(f"🔥 TREND {a_n}")
