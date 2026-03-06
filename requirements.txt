@@ -1,6 +1,6 @@
 streamlit
 pandas
+requests
 lxml
 html5lib
-requests
 beautifulsoup4
