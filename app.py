@@ -1,36 +1,40 @@
 import streamlit as st
 import requests
+import pandas as pd
 
-st.title("🛡️ Verifica Stato API Key")
+st.set_page_config(page_title="PL ANALYZER - PRO", layout="wide")
+st.title("⚽ PL Analyzer - Serie A (7 Marzo)")
 
-# La tua chiave
+# La tua chiave RapidAPI
 MY_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
 
-# PROVA 1: Connessione diretta API-Sports
-headers_direct = {
-    'x-rapidapi-key': MY_KEY,
-    'x-rapidapi-host': 'v3.football.api-sports.io'
+# HEADERS specifici per l'API che hai acquistato: "Free API Live Football Data"
+HEADERS = {
+    "x-rapidapi-key": MY_KEY,
+    "x-rapidapi-host": "free-api-live-football-data.p.rapidapi.com"
 }
 
-# PROVA 2: Connessione tramite RapidAPI (molto probabile se la chiave ha quel formato)
-headers_rapid = {
-    'x-rapidapi-key': MY_KEY,
-    'x-rapidapi-host': 'api-football-v1.p.rapidapi.com'
-}
-
-if st.button("VERIFICA ORA"):
-    st.write("---")
-    st.subheader("Test 1: Host Diretto (api-sports.io)")
+def get_matches():
+    # Nota: Gli endpoint di questa API potrebbero differire da API-Football.
+    # Proviamo a recuperare i match della Serie A (League ID per questa API va verificato)
+    url = "https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date"
+    query = {"date": "20260307"} # Formato tipico per questa API: AAAAMMGG
+    
     try:
-        res1 = requests.get("https://v3.football.api-sports.io/status", headers=headers_direct).json()
-        st.json(res1)
+        response = requests.get(url, headers=HEADERS, params=query).json()
+        return response
     except Exception as e:
-        st.error(f"Errore Test 1: {e}")
+        st.error(f"Errore di connessione: {e}")
+        return None
 
-    st.write("---")
-    st.subheader("Test 2: Host RapidAPI (p.rapidapi.com)")
-    try:
-        res2 = requests.get("https://api-football-v1.p.rapidapi.com/v3/status", headers=headers_rapid).json()
-        st.json(res2)
-    except Exception as e:
-        st.error(f"Errore Test 2: {e}")
+if st.button("🔍 ANALIZZA MATCH DI DOMANI"):
+    with st.spinner("Recupero dati dalla tua sottoscrizione PRO..."):
+        data = get_matches()
+        
+        if data and 'response' in data:
+            # Qui adattiamo la visualizzazione in base alla struttura della tua API
+            st.success("Connessione riuscita!")
+            st.json(data['response']) # Vediamo la struttura per poi creare la tabella
+        else:
+            st.error("L'API non ha restituito dati. Verifica se i parametri della tua API sono corretti.")
+            st.write("Risposta API:", data)
