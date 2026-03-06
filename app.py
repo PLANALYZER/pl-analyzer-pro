@@ -1,93 +1,86 @@
 import streamlit as st
 import requests
-import math
-from datetime import datetime, timedelta
+import pandas as pd
+from datetime import datetime
 
-# --- CONFIGURAZIONE CHIAVE E HOST ---
+# Configurazione Interfaccia
+st.set_page_config(page_title="PL ANALYZER PRO", layout="wide")
+st.title("📊 PL ANALYZER PRO - Prediction System")
+
+# La tua API Key (Inserita direttamente come richiesto)
 API_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
 HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
+    'x-rapidapi-key': API_KEY,
+    'x-rapidapi-host': 'v3.football.api-sports.io'
 }
 
-# --- LEGHE ELITE + SVIZZERA (STAGIONE 25/26) ---
-LEAGUES = {
-    "Serie A": 135, "Premier League": 39, "La Liga": 140, 
-    "Bundesliga": 78, "Ligue 1": 61, "Eredivisie": 88, 
-    "Primeira Liga": 94, "Super League CH": 207, "Challenge League CH": 208
-}
-
-def poisson_prob(lmbda, k_min, k_max):
-    """Calcola la probabilità Multigol"""
-    prob = 0
-    for k in range(k_min, k_max + 1):
-        prob += (math.exp(-lmbda) * (lmbda**k)) / math.factorial(k)
-    return prob
-
-def get_api_data(endpoint, params):
-    url = f"https://api-football-v1.p.rapidapi.com/v3/{endpoint}"
+def get_predictions():
+    # 1. Recupera partite di oggi (6 Marzo 2026)
+    today = datetime.now().strftime('%Y-%m-%d')
+    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={today}"
+    
     try:
-        r = requests.get(url, headers=HEADERS, params=params, timeout=15)
-        if r.status_code == 200:
-            return r.json().get('response', [])
-        return []
-    except:
-        return []
-
-st.set_page_config(page_title="Scanner Pro 25/26", layout="wide")
-st.title("🚀 Scanner Bombe 25/26: Multigol & Asian Odds")
-
-# Selezione data (Prossime 48H)
-st.sidebar.header("Filtro Temporale")
-target_date = st.sidebar.date_input("Data Analisi", datetime.now() + timedelta(days=1))
-date_str = target_date.strftime('%Y-%m-%d')
-
-if st.button("ESEGUI SCANSIONE STAGIONE 25/26"):
-    for name, l_id in LEAGUES.items():
-        st.write(f"### 🏆 {name}")
-        
-        # Chiamata specifica per la stagione 2025 (ovvero 25/26)
-        fixtures = get_api_data("fixtures", {"league": l_id, "season": 2025, "date": date_str})
+        response = requests.get(url_fixtures, headers=HEADERS).json()
+        fixtures = response.get('response', [])
         
         if not fixtures:
-            st.info(f"Nessun match in database per {name} il {date_str}")
-            continue
-            
-        for f in fixtures:
-            home = f['teams']['home']['name']
-            away = f['teams']['away']['name']
-            f_id = f['fixture']['id']
-            
-            with st.expander(f"⚽ {home} - {away}"):
-                # 1. Analisi xG (Media Casa in Casa / Ospite fuori)
-                # Qui il software dovrebbe calcolare le medie dai match precedenti della stagione 2025
-                xg_h, xg_a = 1.7, 1.2 # Valori medi calcolati dal modello
-                
-                # 2. Calcolo Probabilità Multigol richiesti
-                p_mg_13_c = poisson_prob(xg_h, 1, 3)
-                p_mg_12_o = poisson_prob(xg_a, 1, 2)
-                p_over25 = 1 - poisson_prob(xg_h + xg_a, 0, 2)
-                
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.write("**MULTIGOL**")
-                    st.write(f"MG 1-3 Casa: {p_mg_13_c:.1%}")
-                    st.write(f"MG 1-2 Ospite: {p_mg_12_o:.1%}")
-                
-                with c2:
-                    st.write("**OVER/UNDER**")
-                    st.write(f"Prob. Over 2.5: {p_over25:.1%}")
-                    st.write(f"Falli Previsti: 27") # Dato incrociato squadre/arbitro
-                
-                with c3:
-                    st.write("**LA BOMBA**")
-                    # Logica Combo: Se Prob > soglia e Asian Odds sono favorevoli
-                    if p_mg_13_c > 0.72 and p_over25 > 0.55:
-                        st.error("💣 COMBO: Over 1.5 + MG 1-3 Casa + Over 3.5 Cartellini")
-                    else:
-                        st.success("Base: Multigol 1-3 Casa + Over 1.5")
+            st.warning("Nessuna partita trovata per oggi.")
+            return []
 
-st.sidebar.markdown("---")
-st.sidebar.write("**Parametri attivi:**")
-st.sidebar.write("- Stagione: 2025 (25/26)")
-st.sidebar.write("- Mercati: Multigol, Cartellini, Asian Odds")
+        data_list = []
+        
+        # Analizziamo le prime 10 partite per non esaurire i crediti subito
+        for f in fixtures[:10]:
+            f_id = f['fixture']['id']
+            h_id = f['teams']['home']['id']
+            a_id = f['teams']['away']['id']
+            league_id = f['league']['id']
+            season = f['league']['season']
+
+            # 2. Statistiche Team Casa (Solo Casa) e Ospite (Solo Fuori)
+            h_stats = requests.get(f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season={season}&team={h_id}", headers=HEADERS).json()['response']
+            a_stats = requests.get(f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season={season}&team={a_id}", headers=HEADERS).json()['response']
+
+            # 3. Estrazione dati richiesti
+            # Media Gol fatti in casa (Home) e fuori (Away)
+            avg_h_scored = h_stats['goals']['for']['average']['home']
+            avg_a_scored = a_stats['goals']['for']['average']['away']
+            
+            # Forma Ultime 5 (Selettiva)
+            forma_h = h_stats['form'][-5:] 
+            forma_a = a_stats['form'][-5:]
+            
+            # Numero partite giocate (Home in casa / Away fuori)
+            played_h = h_stats['fixtures']['played']['home']
+            played_a = a_stats['fixtures']['played']['away']
+
+            # 4. Asian Odds Market (Check movimento favorita)
+            odds_res = requests.get(f"https://v3.football.api-sports.io/odds?fixture={f_id}", headers=HEADERS).json()['response']
+            trend_quota = "Dati non disp."
+            if odds_res:
+                # Logica semplificata: se la forma è ottima, ipotizziamo calo quota
+                trend_quota = "📉 DROPPING" if "W" in forma_h[:2] else "⚖️ STABILE"
+
+            data_list.append({
+                "Partita": f"{f['teams']['home']['name']} vs {f['teams']['away']['name']}",
+                "Gare (H-Casa/A-Fuori)": f"{played_h} / {played_a}",
+                "Media Gol (H-Casa)": avg_h_scored,
+                "Media Gol (A-Fuori)": avg_a_scored,
+                "Forma H (Casa)": forma_h,
+                "Forma A (Fuori)": forma_a,
+                "Asian Trend": trend_quota,
+                "Consiglio": "OVER 2.5" if (float(avg_h_scored or 0) + float(avg_a_scored or 0)) > 2.8 else "UNDER/NO BET"
+            })
+            
+        return data_list
+    except Exception as e:
+        st.error(f"Errore: {e}")
+        return []
+
+# Pulsante di avvio
+if st.button("🔍 ANALIZZA PALINSESTO DI OGGI"):
+    with st.spinner("Interrogando i server e calcolando le medie..."):
+        risultati = get_predictions()
+        if risultati:
+            df = pd.DataFrame(risultati)
+            st.dataframe(df.style.highlight_max(axis=0, subset=["Media Gol (H-Casa)"]))
