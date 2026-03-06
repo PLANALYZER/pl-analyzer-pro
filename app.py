@@ -12,7 +12,7 @@ if not st.session_state["auth"]:
     st.title("🔐 Accesso Riservato - PL Analyzer")
     st.write("Inserisci la chiave d'accesso ricevuta dopo il pagamento PayPal.")
     
-    # Puoi cambiare questa password quando vuoi per i nuovi clienti
+    # Questa è la password che darai ai tuoi clienti
     password_master = "BOMBER2026" 
     
     input_pass = st.text_input("Chiave d'accesso:", type="password")
@@ -23,16 +23,16 @@ if not st.session_state["auth"]:
             st.rerun()
         else:
             st.error("Chiave errata. Controlla l'email di conferma.")
-    st.stop() # Blocca il resto del codice se non sei loggato
+    st.stop() 
 
-# 3. Interfaccia del Software (Cosa vede il cliente che paga)
+# 3. Interfaccia del Software
 st.title("⚽ PL Analyzer Pro - Intelligence Dati")
 st.sidebar.success("Licenza Attiva")
 
-c6a3eb71e7e203103715c6ee7dc932cd
-API_KEY = "IL_TUO_CODICE_QUI" 
+# --- LA TUA API KEY INSERITA ---
+API_KEY = "c6a3eb71e7e203103715c6ee7dc932cd" 
 
-
+# Selezione del Campionato
 campionato = st.selectbox("Seleziona il Campionato da analizzare:", 
                           ["soccer_italy_serie_a", "soccer_epl", "soccer_spain_la_liga", "soccer_germany_bundesliga"])
 
@@ -41,29 +41,37 @@ if st.button("Analizza Partite e Trend Quote"):
     
     # Chiamata alle API per le quote
     url = f"https://api.the-odds-api.com/v4/sports/{campionato}/odds/?apiKey={API_KEY}&regions=eu&markets=h2h"
-    response = requests.get(url)
     
-    if response.status_code == 200:
-        partite = response.json()
-        
-        if not partite:
-            st.warning("Nessuna partita trovata al momento.")
-        
-        for match in partite:
-            with st.expander(f"📊 {match['home_team']} vs {match['away_team']}"):
-                st.write("**Analisi Quote (Market Move):**")
-                
-                # Mostriamo le quote dei primi 2 bookmaker trovati
-                for bookie in match['bookmakers'][:2]:
-                    st.write(f"Sito: {bookie['title']}")
-                    odds = bookie['markets'][0]['outcomes']
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric(f"1 ({odds[0]['name']})", odds[0]['price'])
-                    col2.metric(f"2 ({odds[1]['name']})", odds[1]['price'])
-                    if len(odds) > 2:
-                        col3.metric("X", odds[2]['price'])
-    else:
-        st.error("Errore di connessione. Verifica di aver inserito correttamente la tua API KEY.")
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            partite = response.json()
+            
+            if not partite:
+                st.warning("Nessuna partita trovata al momento per questo campionato.")
+            
+            for match in partite:
+                with st.expander(f"📊 {match['home_team']} vs {match['away_team']}"):
+                    st.write("**Quote Attuali (Testa a Testa):**")
+                    
+                    # Mostriamo i dati dei bookmaker disponibili
+                    for bookie in match['bookmakers'][:3]: # Mostra fino a 3 bookmaker
+                        st.write(f"--- {bookie['title']} ---")
+                        odds = bookie['markets'][0]['outcomes']
+                        
+                        col1, col2, col3 = st.columns(3)
+                        # Cerchiamo di mappare 1, X, 2 correttamente
+                        for outcome in odds:
+                            if outcome['name'] == match['home_team']:
+                                col1.metric("1 (Casa)", outcome['price'])
+                            elif outcome['name'] == match['away_team']:
+                                col3.metric("2 (Ospite)", outcome['price'])
+                            else:
+                                col2.metric("X (Pareggio)", outcome['price'])
+        else:
+            st.error(f"Errore API: {response.status_code}. Verifica il tuo piano su The Odds API.")
+    except Exception as e:
+        st.error(f"Si è verificato un errore tecnico: {e}")
 
 # 4. Nota per l'utente
 st.sidebar.divider()
