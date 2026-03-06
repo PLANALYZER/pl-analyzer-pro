@@ -8,10 +8,13 @@ if "auth" not in st.session_state:
     st.session_state["auth"] = False
 if not st.session_state["auth"]:
     st.title("🔐 Accesso Riservato")
-    if st.text_input("Inserisci Password:", type="password") == "BOMBER2026":
-        if st.button("Sblocca Software"):
+    password = st.text_input("Inserisci Password:", type="password")
+    if st.button("Sblocca Software"):
+        if password == "BOMBER2026":
             st.session_state["auth"] = True
             st.rerun()
+        else:
+            st.error("Password Errata")
     st.stop()
 
 # --- CHIAVI API ---
@@ -24,18 +27,10 @@ league_map = {"soccer_italy_serie_a": "SA", "soccer_epl": "PL", "soccer_spain_la
 camp_scelto = st.selectbox("Seleziona Campionato:", list(league_map.keys()))
 
 if st.button("ESEGUI ANALISI TOTALE"):
-    with st.spinner("Elaborazione dati, medie e stato di forma..."):
+    with st.spinner("Elaborazione dati e medie campionato..."):
         
         headers = {'X-Auth-Token': FOOTBALL_DATA_KEY}
         url_stats = f"https://api.football-data.org/v4/competitions/{league_map[camp_scelto]}/standings"
         stats_res = requests.get(url_stats, headers=headers).json()
 
-        url_odds = f"https://api.the-odds-api.com/v4/sports/{camp_scelto}/odds/?apiKey={ODDS_API_KEY}&regions=eu&markets=totals"
-        odds_res = requests.get(url_odds).json()
-
-        if "standings" in stats_res:
-            table = stats_res['standings'][0]['table']
-            
-            # --- PUNTO .5: MEDIE CAMPIONATO ---
-            total_matches = sum(t['playedGames'] for t in table) / 2
-            sum_h_gf = sum(t.get('home', {}
+        url_odds = f"https://api.the-odds-api.com/v4/sports/{camp_scelto}/odds/?apiKey={ODDS_API_KEY}&regions=eu
