@@ -1,20 +1,34 @@
 import streamlit as st
 import requests
+from datetime import datetime, timedelta
 
-# Inserisci qui la tua key
-headers = {
-    "X-RapidAPI-Key": "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4",
-    "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com"
+# CONFIGURAZIONE CORRETTA
+API_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
+# Assicurati che l'host sia questo per api-football
+HEADERS = {
+    "X-RapidAPI-Key": API_KEY,
+    "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com" 
 }
 
 st.title("⚽ Scanner Bombe 48H")
 
-def test_connection():
-    url = "https://api-football-v1.p.rapidapi.com/v3/timezone"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        st.success("Connessione API OK!")
-    else:
-        st.error(f"Errore API: {response.status_code} - Controlla il piano dell'abbonamento.")
+# Lista Leghe (Serie A, B, C, Premier, etc.)
+LEAGUES = {"Serie A": 135, "Serie B": 136, "Premier League": 39, "La Liga": 140}
 
-test_connection()
+def get_matches():
+    url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
+    # Range 48 ore
+    params = {
+        "date": datetime.now().strftime('%Y-%m-%d'),
+        "league": 135, # Esempio Serie A
+        "season": 2025
+    }
+    response = requests.get(url, headers=HEADERS, params=params)
+    return response.json()
+
+# ESECUZIONE
+data = get_matches()
+if "errors" in data and data["errors"]:
+    st.error(f"Errore rilevato: {data['errors']}")
+else:
+    st.success("Dati caricati! Elaborazione parametri Multigol...")
