@@ -126,4 +126,3 @@ if st.button("ESEGUI ANALISI COMPLETA"):
                             with p3:
                                 if (f_h + f_a) > 20 and txg > 2.7: st.success("🔥 TOP COMBO")
                                 elif f_h > 12: st.info("🏠 FORTINO CASA")
-                                    
