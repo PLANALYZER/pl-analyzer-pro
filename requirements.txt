@@ -1,4 +1,2 @@
-streamlit
+Plaintext
 requests
-pandas
-scipy
