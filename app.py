@@ -1,88 +1,63 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime
 
-st.set_page_config(page_title="PL ANALYZER PRO", layout="wide")
-st.title("📊 PL ANALYZER PRO (Versione a Pagamento)")
+st.set_page_config(page_title="PL ANALYZER - DEBUG", layout="wide")
 
-# Configurazione API
 API_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
-HEADERS = {
-    'x-rapidapi-key': API_KEY,
-    'x-rapidapi-host': 'v3.football.api-sports.io'
-}
+HEADERS = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
 
-def get_predictions():
-    # Usiamo la data odierna
-    today = datetime.now().strftime('%Y-%m-%d')
-    url_fixtures = f"https://v3.football.api-sports.io/fixtures?date={today}"
+# Parametri fissi per domani
+ID_SERIE_A = 135 
+STAGIONE = 2025 
+DATA_DOMANI = "2026-03-07"
+
+st.title("🛠️ Debug Serie A - 7 Marzo")
+
+if st.button("Lancia Ricerca Forzata"):
+    # 1. Vediamo prima se la Lega 135 è disponibile per la stagione 2025
+    st.write("Controllo disponibilità Serie A...")
     
-    try:
-        response = requests.get(url_fixtures, headers=HEADERS).json()
-        fixtures = response.get('response', [])
+    # Cerchiamo i match di domani con fuso orario Roma
+    url = f"https://v3.football.api-sports.io/fixtures?league={ID_SERIE_A}&season={STAGIONE}&date={DATA_DOMANI}&timezone=Europe/Rome"
+    
+    response = requests.get(url, headers=HEADERS).json()
+    
+    if response.get('errors'):
+        st.error(f"L'API ha restituito un errore: {response['errors']}")
+    
+    matches = response.get('response', [])
+    
+    if not matches:
+        st.warning(f"L'API dice che non ci sono match per il {DATA_DOMANI} in Serie A.")
+        st.write("Risposta completa dell'API per i tecnici:", response) # Questo ci dice TUTTO
+    else:
+        st.success(f"Trovati {len(matches)} match!")
         
-        if not fixtures:
-            return "Nessun match trovato per oggi."
+        data_rows = []
+        for m in matches:
+            h_name = m['teams']['home']['name']
+            a_name = m['teams']['away']['name']
+            h_id = m['teams']['home']['id']
+            a_id = m['teams']['away']['id']
+            
+            # Recupero Stats
+            h_s = requests.get(f"https://v3.football.api-sports.io/teams/statistics?league={ID_SERIE_A}&season={STAGIONE}&team={h_id}", headers=HEADERS).json()['response']
+            a_s = requests.get(f"https://v3.football.api-sports.io/teams/statistics?league={ID_SERIE_A}&season={STAGIONE}&team={a_id}", headers=HEADERS).json()['response']
+            
+            # Calcolo le tue medie (Fatti Casa / Fatti Fuori)
+            avg_h = h_s['goals']['for']['average']['home']
+            avg_a = a_s['goals']['for']['average']['away']
+            forma_h = h_s['form'][-5:]
+            forma_a = a_s['form'][-5:]
 
-        data_list = []
-        for f in fixtures[:20]: # Con l'account a pagamento puoi analizzarne di più
-            f_id = f['fixture']['id']
-            h_id = f['teams']['home']['id']
-            a_id = f['teams']['away']['id']
-            league_id = f['league']['id']
-            season = f['league']['season']
-
-            # 1. Recupero Statistiche (H-Casa e A-Fuori)
-            h_res = requests.get(f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season={season}&team={h_id}", headers=HEADERS).json()
-            a_res = requests.get(f"https://v3.football.api-sports.io/teams/statistics?league={league_id}&season={season}&team={a_id}", headers=HEADERS).json()
-
-            if h_res.get('response') and a_res.get('response'):
-                h_s = h_res['response']
-                a_s = a_res['response']
-
-                # FORMULA CORRETTA: Media gol FATTI in casa (H) e FATTI fuori (A)
-                # Usiamo .get() e float() per evitare errori se il dato è mancante
-                avg_h_scored = float(h_s['goals']['for']['average']['home'] or 0)
-                avg_a_scored = float(a_s['goals']['for']['average']['away'] or 0)
-                
-                # Partite giocate nel rispettivo ruolo
-                played_h = h_s['fixtures']['played']['home']
-                played_a = a_s['fixtures']['played']['away']
-
-                # Forma Ultime 5 (Selettiva)
-                forma_h = h_s['form'][-5:] if h_s['form'] else ""
-                forma_a = a_s['form'][-5:] if a_s['form'] else ""
-
-                # 2. Analisi Quote Asian (Confronto Opening vs Current)
-                odds_res = requests.get(f"https://v3.football.api-sports.io/odds?fixture={f_id}", headers=HEADERS).json()
-                trend_odds = "Stabile"
-                
-                # Logica semplificata: se la media gol totale > 2.5 e forma è buona
-                score_pred = avg_h_scored + avg_a_scored
-                consiglio = "🔥 OVER 2.5" if score_pred > 2.5 else "⚖️ UNDER / NO BET"
-
-                data_list.append({
-                    "Campionato": f['league']['name'],
-                    "Match": f"{f['teams']['home']['name']} - {f['teams']['away']['name']}",
-                    "Gare (H-Casa)": played_h,
-                    "Gare (A-Fuori)": played_a,
-                    "Media Gol H (Casa)": avg_h_scored,
-                    "Media Gol A (Fuori)": avg_a_scored,
-                    "Forma H": forma_h,
-                    "Forma A": forma_a,
-                    "Pronostico": consiglio
-                })
-        
-        return data_list
-    except Exception as e:
-        return f"Errore nel calcolo: {str(e)}"
-
-if st.button("ESEGUI ANALISI PROFESSIONALE"):
-    with st.spinner("Accesso ai dati Pro in corso..."):
-        risultati = get_predictions()
-        if isinstance(risultati, list):
-            df = pd.DataFrame(risultati)
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.error(risultati)
+            data_rows.append({
+                "Ora": m['fixture']['date'][11:16],
+                "Partita": f"{h_name} - {a_name}",
+                "Media Gol Casa": avg_h,
+                "Media Gol Ospite": avg_a,
+                "Forma H": forma_h,
+                "Forma A": forma_a
+            })
+            
+        st.table(pd.DataFrame(data_rows))
