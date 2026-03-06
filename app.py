@@ -11,9 +11,12 @@ if "auth" not in st.session_state:
 if not st.session_state["auth"]:
     st.title("🔐 Accesso Riservato")
     password = st.text_input("Inserisci Licenza:", type="password")
-    if password == "BOMBER2026":
-        st.session_state["auth"] = True
-        st.rerun()
+    if st.button("Attiva Software"):
+        if password == "BOMBER2026":
+            st.session_state["auth"] = True
+            st.rerun()
+        else:
+            st.error("Licenza Errata")
     st.stop()
 
 # --- 2. CHIAVI API ---
@@ -35,8 +38,8 @@ if st.button("ESEGUI ANALISI COMPLETA"):
         # 1. Recupero Classifica
         res_stats = requests.get(f"https://api.football-data.org/v4/competitions/{league_map[scelta]}/standings", headers=headers).json()
         
-        # 2. Recupero Match finiti (Finestra 100gg per avere 5 casa/5 fuori)
-        d_from = (datetime.now() - timedelta(days=100)).strftime('%Y-%m-%d')
+        # 2. Recupero Match finiti (Finestra 120gg per avere dati casa/fuori sufficienti)
+        d_from = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
         d_to = datetime.now().strftime('%Y-%m-%d')
         res_history = requests.get(f"https://api.football-data.org/v4/competitions/{league_map[scelta]}/matches?dateFrom={d_from}&dateTo={d_to}&status=FINISHED", headers=headers).json()
         
@@ -85,44 +88,44 @@ if st.button("ESEGUI ANALISI COMPLETA"):
 
                         f_h, f_a = get_h_form(h_id), get_a_form(a_id)
 
-                        # --- CALCOLO xG ---
-                        hp, hgf, hgs = h_s['playedGames'], h_s['goalsFor'], h_s['goalsAgainst']
-                        ap, agf, ags = a_s['playedGames'], a_s['goalsFor'], a_s['goalsAgainst']
+                        # --- CALCOLO xG (FIX VARIABILI) ---
+                        h_p, h_gf, h_gs = h_s['playedGames'], h_s['goalsFor'], h_s['goalsAgainst']
+                        a_p, a_gf, a_gs = a_s['playedGames'], a_s['goalsFor'], a_s['goalsAgainst']
                         
-                        xh = ((h_gf/hp)/avg_league) * ((ags/ap)/avg_league) * avg_league
-                        xa = ((agf/ap)/avg_league) * ((hgs/hp)/avg_league) * avg_league
+                        # Evita divisione per zero
+                        h_p = h_p if h_p > 0 else 1
+                        a_p = a_p if a_p > 0 else 1
+
+                        xh = ((h_gf/h_p)/avg_league) * ((a_gs/a_p)/avg_league) * avg_league
+                        xa = ((a_gf/a_p)/avg_league) * ((h_gs/h_p)/avg_league) * avg_league
                         txg = xh + xa
 
                         with st.expander(f"📊 {h_n} vs {a_n} | xG: {txg:.2f}"):
                             c1, c2, c3 = st.columns(3)
                             with c1:
-                                st.metric("FORMA CASA", f"{f_h}/15")
+                                st.metric("FORMA CASA (in Casa)", f"{f_h}/15")
                                 st.write(f"xG Casa: {xh:.2f}")
                             with c2:
-                                st.metric("FORMA FUORI", f"{f_a}/15")
+                                st.metric("FORMA OSPITE (Fuori)", f"{f_a}/15")
                                 st.write(f"xG Ospite: {xa:.2f}")
                             with c3:
                                 try:
                                     q_data = match['bookmakers'][0]['markets'][0]['outcomes']
                                     o25 = next(o['price'] for o in q_data if o['name']=='Over' and o['point']==2.5)
                                     st.metric("QUOTA O2.5", o25)
-                                    # --- TREND QUOTA (PUNTO 4) ---
-                                    if o25 < 1.75 and txg > 2.6: 
-                                        st.success("📉 TREND: DOWN (Valore)")
-                                    elif o25 > 2.10 and txg < 2.3:
-                                        st.warning("📈 TREND: UP (Sfavore)")
+                                    if o25 < 1.75 and txg > 2.6: st.success("📉 TREND: DOWN (VALORE)")
                                 except: st.write("Quota N/D")
 
                             st.divider()
-                            # --- PRONOSTICI (PUNTI 1-2-3-7) ---
+                            # --- PRONOSTICI ---
                             p1, p2, p3 = st.columns(3)
                             with p1:
                                 if txg > 2.6: st.success("🎯 OVER 2.5")
-                                elif txg < 2.2: st.warning("🛡️ UNDER 2.5")
+                                elif txg < 2.1: st.warning("🛡️ UNDER 2.5")
                                 else: st.info("⚖️ NO BET")
                             with p2:
                                 if xh > 0.85 and xa > 0.85: st.success("⚽ GOAL")
                                 else: st.info("🚫 NO GOAL")
                             with p3:
-                                if (f_h + f_a) > 20 and txg > 2.7: st.success("🔥 TOP COMBO")
-                                elif f_h > 12: st.info("🏠 FORTINO CASA")
+                                if (f_h + f_a) > 18 and txg > 2.7: st.success("🔥 TOP COMBO")
+                                elif f_h > 12: st.info("🏟️ FORTINO CASA")
