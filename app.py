@@ -29,10 +29,10 @@ if not st.session_state["auth"]:
 st.title("⚽ PL Analyzer Pro - Intelligence Dati")
 st.sidebar.success("Licenza Attiva")
 
-# INSERISCI QUI LA TUA CHIAVE API (quella che ti è arrivata via email)
+c6a3eb71e7e203103715c6ee7dc932cd
 API_KEY = "IL_TUO_CODICE_QUI" 
 
-# Selezc6a3eb71e7e203103715c6ee7dc932c
+
 campionato = st.selectbox("Seleziona il Campionato da analizzare:", 
                           ["soccer_italy_serie_a", "soccer_epl", "soccer_spain_la_liga", "soccer_germany_bundesliga"])
 
