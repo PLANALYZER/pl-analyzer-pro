@@ -1,46 +1,45 @@
-# --- 4. LOGICA ALGORITMO OVER/UNDER & xG TOTALI ---
-        def calcola_pronostico_over_under(home_stats, away_stats, played_home, played_away):
-            # Media Campionato (esempio Serie A)
-            league_avg_home = 1.50
-            league_avg_away = 1.25
+import streamlit as st
+import requests
+from datetime import datetime, timedelta
 
-            # 1. Calcolo Forza Attacco/Difesa basato sulle partite giocate (Played)
-            # xG_fatti / partite_giocate
-            att_h = (home_stats['xg_for'] / played_home) / league_avg_home
-            def_h = (home_stats['xg_against'] / played_home) / league_avg_away
-            
-            att_a = (away_stats['xg_for'] / played_away) / league_avg_away
-            def_a = (away_stats['xg_against'] / played_away) / league_avg_home
+# --- 1. CONFIGURAZIONE PAGINA ---
+st.set_page_config(page_title="PL Analyzer PRO", layout="wide")
 
-            # 2. xG Attesi per questa specifica partita
-            exp_home = att_h * def_a * league_avg_home
-            exp_away = att_a * def_h * league_avg_away
-            
-            # 3. xG TOTALI DELLA PARTITA
-            xg_totale_match = exp_home + exp_away
+# --- 2. CHIAVI API (Usa st.secrets per sicurezza su GitHub!) ---
+ODDS_API_KEY = "c6a3eb71e7e203103715c6ee7dc932cd"
+FOOTBALL_DATA_KEY = "1224218727ff4b98bea0cd9941196e99"
 
-            # 4. LOGICA PRONOSTICI OVER
-            pronostici = []
-            if xg_totale_match > 1.6: pronostici.append("OVER 1.5")
-            if xg_totale_match > 2.5: pronostici.append("OVER 2.5")
-            if xg_totale_match > 3.4: pronostici.append("OVER 3.5")
-            
-            # Combo Goal + Over
-            if exp_home > 0.8 and exp_away > 0.8 and xg_totale_match > 2.4:
-                pronostici.append("GOAL + OVER 2.5")
-            
-            return round(xg_totale_match, 2), pronostici
+# --- 3. FORMULA ALGORITMO OVER/UNDER & xG TOTALI ---
+def calcola_analisi_gol(h_xg_f, h_xg_s, a_xg_f, a_xg_s, p_home, p_away):
+    # Medie Campionato stimati (es. 1.55 casa, 1.20 trasferta)
+    # Questi rendono la formula sensibile al fattore campo
+    MEDIA_C = 1.55
+    MEDIA_T = 1.20
 
-        # --- Visualizzazione nell'App Streamlit ---
-        # (Esempio con dati fittizi che dovrai mappare con le tue API)
-        xg_tot, lista_pronostici = calcola_pronostico_over_under(
-            {'xg_for': 25.4, 'xg_against': 12.1}, # Dati Casa accumulati
-            {'xg_for': 18.2, 'xg_against': 22.5}, # Dati Ospite accumulati
-            14, 13 # Partite giocate finora
-        )
+    # Normalizzazione per partita giocata (Played)
+    ph = p_home if p_home > 0 else 1
+    pa = p_away if p_away > 0 else 1
 
-        st.markdown(f"### ⚽ Analisi Goal: **{xg_tot} xG Totali**")
-        
-        cols = st.columns(len(lista_pronostici) if lista_pronostici else 1)
-        for i, p in enumerate(lista_pronostici):
-            cols[i].success(f"🔥 {p}")
+    # Calcolo Forza Attacco e Difesa relativa
+    # (xG fatti / partite) / media_gol_campionato
+    att_h = (h_xg_f / ph) / MEDIA_C
+    def_h = (h_xg_s / ph) / MEDIA_T
+    att_a = (a_xg_f / pa) / MEDIA_T
+    def_a = (a_xg_s / pa) / MEDIA_C
+
+    # Proiezione xG per la partita attuale
+    exp_h = att_h * def_a * MEDIA_C
+    exp_a = att_a * def_h * MEDIA_T
+    xg_totali = exp_h + exp_a
+
+    # Selezione Pronostici basata sulle soglie di probabilità
+    pronostici = []
+    if xg_totali > 1.75: pronostici.append("OVER 1.5")
+    if xg_totali > 2.60: pronostici.append("OVER 2.5")
+    if xg_totali > 3.55: pronostici.append("OVER 3.5")
+    if exp_h > 0.90 and exp_a > 0.90: pronostici.append("GOAL")
+    
+    return round(xg_totali, 2), pronostici, round(exp_h, 2), round(exp_a, 2)
+
+# --- 4. INTERFACCIA UTENTE ---
+st.title("⚽ ANALYZER PRO - ALGORITMO COMPLETO
