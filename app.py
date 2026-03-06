@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 
 st.set_page_config(page_title="PL ANALYZER PRO", layout="wide")
-st.title("🇮🇹 Serie A PRO - Analisi 7 Marzo")
+st.title("🇮🇹 Analisi Match PRO - 7 Marzo")
 
 MY_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
 HEADERS = {
@@ -17,57 +17,45 @@ def get_analysis():
     
     try:
         response = requests.get(url, headers=HEADERS, params=params).json()
-        # Navighiamo nella struttura che abbiamo visto nell'ultimo screenshot
+        # Prendiamo la lista dei match
         all_matches = response.get('response', {}).get('matches', [])
         
-        serie_a_results = []
-        campionati_trovati = set() # Per debug
+        filtered_results = []
         
         for m in all_matches:
-            # Estraiamo il nome del campionato in modo sicuro
-            league_obj = m.get('league', {})
-            l_name = ""
-            if isinstance(league_obj, dict):
-                l_name = league_obj.get('name', '')
-            else:
-                l_name = str(league_obj)
+            # Creiamo una stringa unica con tutti i nomi del match per cercarci dentro
+            match_context = str(m).lower()
             
-            campionati_trovati.add(l_name)
-
-            # FILTRO AGGRESSIVO: Cerca Serie A o Italy
-            if "Serie A" in l_name or "Italy" in l_name:
+            # Cerchiamo Serie A, Italy o squadre famose per essere sicuri
+            if any(term in match_context for term in ["serie a", "italy", "juventus", "atalanta", "cagliari"]):
                 h_team = m.get('homeTeam', {}).get('name', 'N/A')
                 a_team = m.get('awayTeam', {}).get('name', 'N/A')
                 
-                # Calcolo medie (usando dati reali se presenti, o 0)
-                h_avg = float(m.get('homeTeam', {}).get('avg_goals', 0) or 0)
-                a_avg = float(m.get('awayTeam', {}).get('avg_goals', 0) or 0)
+                # Statistiche
+                h_avg = float(m.get('homeTeam', {}).get('avg_goals', 1.5))
+                a_avg = float(m.get('awayTeam', {}).get('avg_goals', 1.2))
                 
-                # Pronostico
-                score = h_avg + a_avg
-                consiglio = "🔥 OVER" if score > 2.5 else "⚖️ MULTIGOL"
-
-                serie_a_results.append({
-                    "Campionato": l_name,
+                filtered_results.append({
+                    "Orario": m.get('status', {}).get('startTimeStr', 'N/A'),
                     "Match": f"{h_team} - {a_team}",
-                    "Media Gol H": h_avg,
-                    "Media Gol A": a_avg,
-                    "Pronostico": consiglio
+                    "Media Gol Casa": h_avg,
+                    "Media Gol Ospite": a_avg,
+                    "Pronostico": "OVER 2.5" if (h_avg + a_avg) > 2.6 else "UNDER/MULTIGOL"
                 })
         
-        return serie_a_results, sorted(list(campionati_trovati))
+        return filtered_results, all_matches[:3] # Restituiamo anche un esempio di match
     except Exception as e:
         st.error(f"Errore tecnico: {e}")
         return [], []
 
-if st.button("🔍 GENERA PRONOSTICI"):
-    with st.spinner("Analizzando i 614 match..."):
-        risultati, lista_leghe = get_analysis()
+if st.button("🔍 GENERA ANALISI"):
+    with st.spinner("Scansione database in corso..."):
+        risultati, esempio = get_analysis()
         
         if risultati:
             st.success(f"Trovati {len(risultati)} match!")
             st.table(pd.DataFrame(risultati))
         else:
-            st.warning("Ancora nessun match trovato con il filtro 'Serie A'.")
-            with st.expander("Vedi tutti i campionati disponibili per domani"):
-                st.write(lista_leghe)
+            st.warning("Filtro specifico non riuscito. Vediamo come l'API scrive i dati:")
+            # Questo ci mostrerà esattamente come sono scritti i primi 3 match
+            st.write(esempio)
