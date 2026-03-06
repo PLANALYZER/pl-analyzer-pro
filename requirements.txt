@@ -1,5 +1,8 @@
 streamlit
-requests
 pandas
+requests
 numpy
 scipy
+lxml
+html5lib
+BeautifulSoup4
