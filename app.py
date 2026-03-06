@@ -1,104 +1,67 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-from scipy.stats import poisson
-import requests
-import io
 
-st.set_page_config(page_title="PL Analyzer Pro - Ultra", layout="wide")
-st.title("⚽ PL Analyzer Pro: Analisi Dati Multi-League")
+st.set_page_config(page_title="Ultimate PL Analyzer - Business", layout="wide")
 
-# --- DATABASE MAPPATO CON CURA ---
-LEAGUES = {
-    "Premier League 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "E0",
-    "Championship 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "E1",
-    "League One 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "E2",
-    "League Two 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "E3",
-    "National League 🏴󠁧󠁢󠁥󠁮󠁧󠁿": "EC",
-    "Serie A 🇮🇹": "I1",
-    "Serie B 🇮🇹": "I2",
-    "La Liga 🇪🇸": "SP1",
-    "Segunda Division 🇪🇸": "SP2",
-    "Bundesliga 🇩🇪": "D1",
-    "Bundesliga 2 🇩🇪": "D2",
-    "Eredivisie 🇳🇱": "N1",
-    "Eerste Divisie 🇳🇱": "N2",
-    "Portogallo Liga I 🇵🇹": "P1",
-    "Belgio Pro League 🇧🇪": "B1",
-    "Austria Bundesliga 🇦🇹": "AUT",
-    "Svizzera Super League 🇨🇭": "SWZ",
-    "Danimarca Superliga 🇩🇰": "DAN",
-    "Polonia Ekstraklasa 🇵🇱": "POL",
-    "Bulgaria Parva Liga 🇧🇬": "BUL"
+st.title("🏆 PL Analyzer Pro (Versione Illimitata)")
+st.write("Software di analisi senza costi API - Copertura Europea Totale")
+
+# Mappa dei campionati su FBRef (Esempi)
+LEAGUE_URLS = {
+    "Serie A 🇮🇹": "https://fbref.com/it/comp/11/Statistiche-di-Serie-A",
+    "Polonia 🇵🇱": "https://fbref.com/it/comp/36/Statistiche-di-Ekstraklasa",
+    "Bulgaria 🇧🇬": "https://fbref.com/it/comp/69/Statistiche-di-First-Professional-Football-League",
+    "Svizzera 🇨🇭": "https://fbref.com/it/comp/57/Statistiche-di-Super-League",
+    "Danimarca 🇩🇰": "https://fbref.com/it/comp/50/Statistiche-di-Superliga"
 }
 
-scelta = st.sidebar.selectbox("Scegli Campionato", list(LEAGUES.keys()))
-league_code = LEAGUES[scelta]
+scelta = st.sidebar.selectbox("Seleziona Campionato", list(LEAGUE_URLS.keys()))
 
-@st.cache_data(ttl=3600)
-def load_data_final(code):
-    # Prova 1: Stagione attuale 25/26 | Prova 2: Stagione precedente 24/25
-    for season in ["2526", "2425"]:
-        url = f"https://www.football-data.co.uk/mmz4281/{season}/{code}.csv"
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                df = pd.read_csv(io.StringIO(response.text))
-                if not df.empty and 'HomeTeam' in df.columns:
-                    return df.dropna(subset=['HomeTeam', 'AwayTeam']), season
-        except:
-            continue
-    return pd.DataFrame(), None
+@st.cache_data(ttl=86400) # Salva i dati per 24 ore per essere velocissimo
+def load_data(url):
+    # Legge tutte le tabelle della pagina
+    tables = pd.read_html(url)
+    df = tables[0] # La prima tabella è sempre la classifica
+    return df
 
-df, stagione_usata = load_data_final(league_code)
-
-if not df.empty:
-    st.success(f"Dati caricati! (Stagione: {stagione_usata})")
+try:
+    data = load_data(LEAGUE_URLS[scelta])
     
-    # Pulizia colonne per evitare errori su campionati minori
-    cols = ['HomeTeam', 'AwayTeam', 'FTHG', 'FTAG']
-    df = df[cols].dropna()
+    # Pulizia nomi colonne per FBRef
+    data = data[['Squadra', 'MP', 'GF', 'GS', 'DR', 'Pti', 'Ultimi 5']]
+    
+    st.subheader(f"Classifica e Forma Recente: {scelta}")
+    st.dataframe(data, use_container_width=True)
 
-    teams = sorted(df['HomeTeam'].unique())
     c1, c2 = st.columns(2)
-    h_team = c1.selectbox("Casa", teams)
-    a_team = c2.selectbox("Trasferta", teams)
+    casa = c1.selectbox("Squadra in Casa", data['Squadra'].unique())
+    fuori = c2.selectbox("Squadra in Trasferta", data['Squadra'].unique())
 
-    if h_team and a_team:
-        # Calcolo Medie
-        avg_h = df['FTHG'].mean()
-        avg_a = df['FTAG'].mean()
-
-        def get_xg(team, is_home):
-            sub = df[df['HomeTeam'] == team] if is_home else df[df['AwayTeam'] == team]
-            return sub['FTHG'].mean() if is_home else sub['FTAG'].mean()
-
-        l_h = (get_xg(h_team, True) / avg_h) * (get_xg(a_team, False) / avg_h) * avg_h
-        l_a = (get_xg(a_team, False) / avg_a) * (get_xg(h_team, True) / avg_a) * avg_a
+    if st.button("GENERA PRONOSTICO"):
+        # Estrazione dati per algoritmo
+        stats_casa = data[data['Squadra'] == casa].iloc[0]
+        stats_fuori = data[data['Squadra'] == fuori].iloc[0]
+        
+        # Calcolo medie gol (Semplificato per il prototipo)
+        media_gol_casa = stats_casa['GF'] / stats_casa['MP']
+        media_gol_fuori = stats_fuori['GF'] / stats_fuori['MP']
+        tot_media = (media_gol_casa + media_gol_fuori)
 
         st.divider()
-        m1, m2, m3 = st.columns(3)
-        m1.metric(f"xG {h_team}", round(l_h, 2))
-        m2.metric(f"xG {a_team}", round(l_a, 2))
-        m3.metric("Goal Totali", round(l_h + l_a, 2))
-
-        # Pronostico
-        st.subheader("🎯 Pronostico")
-        total = l_h + l_a
-        if total > 2.8: st.success("OVER 2.5")
-        elif total > 2.1: st.info("OVER 1.5")
-        else: st.warning("UNDER 2.5")
-
-        # Risultati Esatti
-        st.subheader("🔢 Probabilità Risultati")
-        res = []
-        for h in range(4):
-            for a in range(4):
-                p = poisson.pmf(h, l_h) * poisson.pmf(a, l_a)
-                res.append({'Score': f"{h}-{a}", 'P': p})
+        st.subheader("🎯 Consiglio Algoritmo")
         
-        for r in pd.DataFrame(res).sort_values('P', ascending=False).head(3).to_dict('records'):
-            st.write(f"**{r['Score']}** ({r['P']:.1%})")
-else:
-    st.error("⚠️ Il database non ha dati per questo campionato. Potrebbe essere in pausa o il file non è ancora pronto sul server.")
+        # I TUOI 5 CONSIGLI BASATI SUI DATI REALI
+        if tot_media > 3.2:
+            st.success("🔥 Suggerimento: **OVER 3.5**")
+        elif tot_media > 2.6:
+            st.success("⚽ Suggerimento: **GOAL + OVER 2.5**")
+        elif tot_media > 2.2:
+            st.success("✅ Suggerimento: **OVER 2.5**")
+        elif tot_media > 1.6:
+            st.info("👍 Suggerimento: **OVER 1.5**")
+        else:
+            st.warning("⚠️ Suggerimento: **NO BET** (Partita da Under)")
+
+except Exception as e:
+    st.error(f"Errore nel caricamento dei dati: {e}")
+    st.info("Nota: FBRef potrebbe limitare le richieste frequenti. Il sistema usa la cache per proteggerti.")
