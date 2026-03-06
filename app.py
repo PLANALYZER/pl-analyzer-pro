@@ -1,34 +1,13 @@
-import streamlit as st
-import requests
-from datetime import datetime, timedelta
-
-# CONFIGURAZIONE CORRETTA
-API_KEY = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
-# Assicurati che l'host sia questo per api-football
-HEADERS = {
-    "X-RapidAPI-Key": API_KEY,
-    "X-RapidAPI-Host": "api-football-v1.p.rapidapi.com" 
-}
-
-st.title("⚽ Scanner Bombe 48H")
-
-# Lista Leghe (Serie A, B, C, Premier, etc.)
-LEAGUES = {"Serie A": 135, "Serie B": 136, "Premier League": 39, "La Liga": 140}
-
-def get_matches():
-    url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-    # Range 48 ore
-    params = {
-        "date": datetime.now().strftime('%Y-%m-%d'),
-        "league": 135, # Esempio Serie A
-        "season": 2025
-    }
-    response = requests.get(url, headers=HEADERS, params=params)
-    return response.json()
-
-# ESECUZIONE
-data = get_matches()
-if "errors" in data and data["errors"]:
-    st.error(f"Errore rilevato: {data['errors']}")
-else:
-    st.success("Dati caricati! Elaborazione parametri Multigol...")
+# Se mancano le Asian Odds, il software procede comunque con xG e Multigol
+def check_params(match_data):
+    # 1. Calcolo Probabilità Multigol (Base)
+    # 2. Controllo Cartellini (Se l'arbitro non è nel database, usa media squadre)
+    # 3. Se Asian Odds calano > 0.10 -> Segnala "VALUE BET"
+    
+    if match_data['league_id'] in [207, 208]:
+        # Logica speciale per la Svizzera (più Over)
+        target_market = "Over 2.5 + MG 1-3 Ospite"
+    else:
+        target_market = "Multigol 1-3 Casa + Over 1.5"
+        
+    return target_market
