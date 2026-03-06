@@ -12,57 +12,62 @@ HEADERS = {
 }
 
 def get_analysis():
-    # Usiamo l'endpoint che ha funzionato nel tuo test
     url = "https://free-api-live-football-data.p.rapidapi.com/football-get-matches-by-date"
     params = {"date": "20260307"}
     
     try:
         response = requests.get(url, headers=HEADERS, params=params).json()
+        # Navighiamo nella struttura che abbiamo visto nell'ultimo screenshot
         all_matches = response.get('response', {}).get('matches', [])
         
         serie_a_results = []
+        campionati_trovati = set() # Per debug
         
         for m in all_matches:
-            # Filtriamo per Serie A (solitamente league_id o league_name)
-            # In questa API cerchiamo nel campo 'league'
-            league_info = m.get('league', {})
-            league_name = league_info.get('name', '') if isinstance(league_info, dict) else str(league_info)
+            # Estraiamo il nome del campionato in modo sicuro
+            league_obj = m.get('league', {})
+            l_name = ""
+            if isinstance(league_obj, dict):
+                l_name = league_obj.get('name', '')
+            else:
+                l_name = str(league_obj)
+            
+            campionati_trovati.add(l_name)
 
-            if "Serie A" in league_name and "Women" not in league_name:
-                h_team = m['homeTeam']['name']
-                a_team = m['awayTeam']['name']
+            # FILTRO AGGRESSIVO: Cerca Serie A o Italy
+            if "Serie A" in l_name or "Italy" in l_name:
+                h_team = m.get('homeTeam', {}).get('name', 'N/A')
+                a_team = m.get('awayTeam', {}).get('name', 'N/A')
                 
-                # Estraiamo le medie gol e forma (se presenti nel blocco match)
-                # Nota: se l'API non le dà qui, usiamo valori calcolati dai risultati recenti
-                h_score_avg = m.get('homeTeam', {}).get('avg_goals', 1.5) # Fallback a 1.5 se manca
-                a_score_avg = m.get('awayTeam', {}).get('avg_goals', 1.2)
+                # Calcolo medie (usando dati reali se presenti, o 0)
+                h_avg = float(m.get('homeTeam', {}).get('avg_goals', 0) or 0)
+                a_avg = float(m.get('awayTeam', {}).get('avg_goals', 0) or 0)
                 
-                # Logica Pronostico basata sulle tue richieste
-                punti_casa = m.get('homeTeam', {}).get('form_points', 0)
-                is_fav_dropping = "📉 SI" if punti_casa > 10 else "⚖️ NO"
+                # Pronostico
+                score = h_avg + a_avg
+                consiglio = "🔥 OVER" if score > 2.5 else "⚖️ MULTIGOL"
 
                 serie_a_results.append({
-                    "Ora": m.get('status', {}).get('startTimeStr', 'N/A'),
+                    "Campionato": l_name,
                     "Match": f"{h_team} - {a_team}",
-                    "Media Gol H (Casa)": h_score_avg,
-                    "Media Gol A (Fuori)": a_score_avg,
-                    "Asian Drop": is_fav_dropping,
-                    "Consiglio": "OVER 2.5" if (h_score_avg + a_score_avg) > 2.6 else "MULTIGOL"
+                    "Media Gol H": h_avg,
+                    "Media Gol A": a_avg,
+                    "Pronostico": consiglio
                 })
         
-        return serie_a_results
+        return serie_a_results, sorted(list(campionati_trovati))
     except Exception as e:
-        st.error(f"Errore: {e}")
-        return []
+        st.error(f"Errore tecnico: {e}")
+        return [], []
 
-if st.button("🔍 GENERA PRONOSTICI SERIE A"):
-    with st.spinner("Filtrando Serie A dai 614 match..."):
-        risultati = get_analysis()
+if st.button("🔍 GENERA PRONOSTICI"):
+    with st.spinner("Analizzando i 614 match..."):
+        risultati, lista_leghe = get_analysis()
         
         if risultati:
-            st.success(f"Analisi completata per {len(risultati)} partite di Serie A!")
+            st.success(f"Trovati {len(risultati)} match!")
             st.table(pd.DataFrame(risultati))
         else:
-            st.warning("Nessun match di Serie A trovato nei dati di domani. Prova ad analizzare tutti i campionati?")
-            if st.checkbox("Mostra tutti i 614 match (Dati Raw)"):
-                st.write(get_analysis())
+            st.warning("Ancora nessun match trovato con il filtro 'Serie A'.")
+            with st.expander("Vedi tutti i campionati disponibili per domani"):
+                st.write(lista_leghe)
