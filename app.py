@@ -2,55 +2,64 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# Impostazioni della Web App
 st.set_page_config(page_title="PL Analyzer Pro", layout="wide")
-st.title("⚽ PL Analyzer Pro - Dashboard Live")
+st.title("⚽ Dashboard Campionati Selezionati")
 
-# La tua Key estratta dai tuoi screenshot
+# Configurazione API
 api_key = "3a90a548bbmsh203fa848b055962p107171jsndc029e36c3f4"
 API_HOST = "free-api-live-football-data.p.rapidapi.com"
 
-# Parametri che abbiamo testato con successo
-target_date = "20260307"
-serie_a_id = "55"
+# La tua lista ID definitiva
+MY_LEAGUES = {
+    "Serie A": "55", "Serie B": "56", "Champions League": "42",
+    "Europa League": "73", "Conference League": "10216",
+    "Premier League": "47", "Championship": "48", "League One": "108",
+    "League Two": "109", "Bundesliga": "54", "La Liga": "87",
+    "Ligue 1": "53", "Eredivisie": "57", "Eerste Divisie": "132",
+    "Svizzera Super League": "130", "Svizzera Challenge": "131"
+}
 
-if st.button("🔄 Collega API e Scarica Partite"):
-    headers = {
-        "X-Rapidapi-Key": api_key,
-        "X-Rapidapi-Host": API_HOST
-    }
+st.sidebar.header("Impostazioni")
+data_scelta = st.sidebar.text_input("Data (YYYYMMDD)", "20260307")
+
+if st.button("🔍 Scarica Partite di Oggi"):
+    all_matches = []
+    headers = {"X-Rapidapi-Key": api_key, "X-Rapidapi-Host": API_HOST}
     
-    # URL esatto dal tuo Playground
-    url = f"https://{API_HOST}/football-get-matches-by-date-and-league?date={target_date}&leagueid={serie_a_id}"
+    progress_bar = st.progress(0)
+    count = 0
     
-    with st.spinner("Connessione in corso..."):
+    for name, lid in MY_LEAGUES.items():
+        count += 1
+        url = f"https://{API_HOST}/football-get-matches-by-date-and-league?date={data_scelta}&leagueid={lid}"
+        
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 data = response.json()
-                
-                # Navighiamo nella struttura che abbiamo visto nel tuo screen
-                matches_extracted = []
+                # Scaviamo nella struttura della tua API
                 if "response" in data:
                     for item in data["response"]:
                         if "matches" in item:
                             for m in item["matches"]:
-                                matches_extracted.append({
+                                all_matches.append({
+                                    "Campionato": name,
                                     "Ora": m.get("time", "N/D"),
                                     "Casa": m.get("home", {}).get("name", "N/D"),
                                     "Ospiti": m.get("away", {}).get("name", "N/D"),
-                                    "ID": m.get("id", "N/D")
+                                    "ID Partita": m.get("id", "N/D")
                                 })
-                
-                if matches_extracted:
-                    st.success(f"✅ Collegamento riuscito! Trovate {len(matches_extracted)} partite.")
-                    st.table(pd.DataFrame(matches_extracted))
-                else:
-                    st.warning("⚠️ L'API è collegata ma non ci sono partite per questa data.")
-                    st.write("Risposta completa per debug:", data)
-            else:
-                st.error(f"❌ Errore di connessione: {response.status_code}")
-        except Exception as e:
-            st.error(f"❌ Errore imprevisto: {e}")
+        except:
+            continue
+        progress_bar.progress(count / len(MY_LEAGUES))
 
-st.sidebar.info("Web App collegata all'API: " + API_HOST)
+    if all_matches:
+        st.success(f"Trovate {len(all_matches)} partite!")
+        df = pd.DataFrame(all_matches)
+        st.dataframe(df, use_container_width=True)
+        st.session_state['today_matches'] = all_matches
+    else:
+        st.warning("Nessuna partita trovata per i campionati selezionati in questa data.")
+
+st.divider()
+st.info("La Web App ora monitora solo i 16 campionati che hai scelto.")
