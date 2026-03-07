@@ -1,52 +1,29 @@
-import streamlit as st
-import requests
-import pandas as pd
-
-st.set_page_config(page_title="PL Analyzer Pro", layout="wide")
-
-# --- DATI TECNICI DALLE TUE IMMAGINI ---
-API_HOST = "free-api-live-football-data.p.rapidapi.com"
-BASE_URL = "https://free-api-live-football-data.p.rapidapi.com/football-"
-
-st.title("⚽ PL Analyzer Pro")
-
-# Sidebar per la Key e la Navigazione
-api_key = st.sidebar.text_input("Inserisci la tua X-RapidAPI-Key", type="password")
-menu = st.sidebar.radio("Menu", ["Fase 1: Liste", "Fase 2: Calendario", "Fase 3: Pronostici"])
-
 if menu == "Fase 1: Liste":
-    st.header("🏆 Caricamento Campionati")
-    st.write("Scarichiamo la lista completa dei campionati per ottenere gli ID.")
+    st.header("🏆 Selezione Campionati")
+    
+    if st.button("Aggiorna Lista Globale"):
+        headers = {"X-Rapidapi-Key": api_key, "X-Rapidapi-Host": API_HOST}
+        response = requests.get(f"{BASE_URL}get-all-leagues", headers=headers)
+        if response.status_code == 200:
+            st.session_state['all_leagues'] = response.json()["response"]["leagues"]
+            st.success("Lista aggiornata!")
 
-    if st.button("Aggiorna Lista Campionati"):
-        if not api_key:
-            st.error("Inserisci la Key nella barra laterale!")
-        else:
-            headers = {
-                "X-Rapidapi-Key": api_key,
-                "X-Rapidapi-Host": API_HOST
-            }
-            with st.spinner("Recupero dati da RapidAPI..."):
-                # Endpoint esatto visto nelle tue immagini
-                url = f"{BASE_URL}get-all-leagues"
-                response = requests.get(url, headers=headers)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    # Navighiamo nella struttura dei dati della tua API
-                    if "response" in data and "leagues" in data["response"]:
-                        df = pd.DataFrame(data["response"]["leagues"])
-                        st.success(f"Trovati {len(df)} campionati!")
-                        st.dataframe(df) # Mostra la tabella
-                    else:
-                        st.json(data) # Debug se la struttura è diversa
-                else:
-                    st.error(f"Errore {response.status_code}: Controlla la Key.")
-
-elif menu == "Fase 2: Calendario":
-    st.header("📅 Calendario Partite")
-    st.write("Qui vedremo i match in programma.")
-
-elif menu == "Fase 3: Pronostici":
-    st.header("📈 Analisi e Pronostico")
-    st.write("Algoritmo in fase di sviluppo...")
+    if 'all_leagues' in st.session_state:
+        df_all = pd.DataFrame(st.session_state['all_leagues'])
+        
+        # --- FILTRO DI RICERCA ---
+        search = st.text_input("Cerca campionato (es. Italy, Premier, Champions...)", "")
+        df_filtered = df_all[df_all['name'].str.contains(search, case=False) | 
+                             df_filtered['localizedName'].str.contains(search, case=False)]
+        
+        st.write("Seleziona i campionati che vuoi monitorare:")
+        selected_leagues = st.multiselect("Campionati attivi:", 
+                                          options=df_filtered['name'].tolist(),
+                                          default=[])
+        
+        # Salviamo gli ID dei campionati scelti per la Fase 2
+        if selected_leagues:
+            watchlist = df_all[df_all['name'].isin(selected_leagues)][['id', 'name']]
+            st.session_state['watchlist'] = watchlist
+            st.table(watchlist)
+            st.success("Configurazione salvata! Ora puoi andare alla Fase 2.")
